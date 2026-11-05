@@ -71,12 +71,45 @@ function mseed(){
   const gv=LN([['Hành khô',40],['Ớt',40],['Đường',50],['Hạt nêm',46],['Bột ngọt',20],['Nước mắm',40],['Màu trung thành',15]]);
   const T=(p,g,gy,t)=>{const th=R({t:'m',n:'Thịt ba chỉ',ing:by('Thịt'),qty:t,y:.6875,add:0,note:'Thịt chín - đã ngót'});return{id:uid(),price:p,rows:[R({t:'m',n:'Xôi vàng (Nền)',ing:by('Gạo làm xôi vàng'),qty:g,y:gy,add:10,note:'Xôi chín'}),th,R({t:'a',n:'Gia vị kho',of:th.id,lines:gv,note:'Nước sốt rưới + gia vị ngấm'}),R({t:'m',n:'Trứng vịt',ing:by('Trứng vịt'),qty:.5,y:1,add:0,note:'Cắt đôi'}),R({t:'s',n:'Bao bì',lines:LN([['Hộp',1],['Thìa',1],['Túi nilon',1]]),note:''})]}};
   return[{id:'d1',n:'Xôi thịt kho',tiers:[T(25000,155,155/110,40),T(30000,190,1.6,50)]}]}
-const save=()=>{try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}};
+
+/* --- KẾT NỐI API GOOGLE SHEETS VÀ FETCH API --- */
+const API_URL = 'https://script.google.com/macros/s/AKfycbyV0ts9bTPoCJnzcYh5UM2XukZ49nF4CWDAa9Y_UWHSR1rjo7mtYwYbGd_DgQ-HawX3/exec'; // Hãy điền link Google Apps Script vào đây
+
+let GST='',gT=null,gBusy=false,gDirty=false;
+const gtxt=()=>'☁ '+(GST||'sẵn sàng');
+function gst(t){GST=t;['#gs','#gs2'].forEach(q=>{const e=$(q);if(e)e.textContent=gtxt()})}
+const save=()=>{S.ts=Date.now();try{localStorage.setItem(K,JSON.stringify(S))}catch(e){} qsync()};
+function qsync(){gDirty=true;clearTimeout(gT);gT=setTimeout(gpush,1500)}
+function gpush(){
+  if(gBusy){gDirty=true;return}
+  gBusy=true;gDirty=false;gst('đang gửi...');
+  if(API_URL === 'ĐIỀN_LINK_CỦA_BẠN_VÀO_ĐÂY') {
+      gBusy=false; gst('chưa gắn link Sheets'); return;
+  }
+  fetch(API_URL, {
+    method: 'POST',
+    headers: {'Content-Type': 'text/plain'}, // Dùng text/plain để tránh lỗi chặn CORS
+    body: JSON.stringify({state: JSON.stringify(S), tables: JSON.stringify(buildTables())})
+  }).then(r=>r.json()).then(res=>{
+    gBusy=false;gst('đã đồng bộ '+new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'}));
+    if(gDirty)gpush();
+  }).catch(e=>{
+    gBusy=false;gst('lỗi gửi, sẽ thử lại');
+    clearTimeout(gT);gT=setTimeout(gpush,15000);
+  });
+}
+function gpull(){ gst('sẵn sàng'); }
+
 const sum=a=>a.reduce((x,y)=>x+y,0),d=(n,m=2)=>(+n).toLocaleString('vi-VN',{maximumFractionDigits:m}),money=n=>d(n,0)+'đ',pr=x=>x<100?d(x,2):d(x,0),pk=p=>d(p/1000,1)+'k';
 const esc=s=>String(s??'').replace(/"/g,'&quot;').replace(/</g,'&lt;');
 const ing=id=>S.ing.find(x=>x.id===id),st=i=>i.s<=0?2:i.s<=i.low?1:0;
 const fac=u=>({kg:1000,'lít':1000})[u]||1,bu=u=>u==='kg'?'g':u==='lít'?'ml':u,bp=g=>pAt(g)/fac(g.u);
+
 let tab='sell',OP=null,armed='',OD='d1',EM=false,ALT=null,GIFT=false,RF=null,RT=null,DINE=0,SEL={},SF=null,ST=null,FXM=null,CM=null,CSRC='app',PJ=null;
+
+/* --- BIẾN TRẠNG THÁI LỌC LỊCH SỬ KHOẢNG NGÀY --- */
+let HSF = dk(Date.now()), HST = dk(Date.now()), SHOW_HISTORY = false;
+
 function toast(m){const t=$('#t');t.textContent=m;t.classList.add('on');clearTimeout(window._t);window._t=setTimeout(()=>t.classList.remove('on'),2200)}
 const go=t=>{tab=t;render()},ch=()=>{save();render()},oh=id=>{OP=OP===id?null:id;render()};
 function render(){
@@ -88,7 +121,18 @@ function render(){
 let VD=null;
 const vd=s=>s.split('-').reverse().join('/');
 const vdate=()=>VD||dk(Date.now()),isT=()=>!VD||VD===dk(Date.now());
-function sv(v){VD=v&&v!==dk(Date.now())?v:null;if(VD){EM=false;OP=null}render()}
+function sv(v){VD=v&&v!==dk(Date.now())?v:null;if(VD){EM=false;OP=null} SHOW_HISTORY=false; render()}
+
+/* Hàm đổi khoảng thời gian lọc lịch sử */
+function setHistRange(f, t) {
+    if(f) HSF = f;
+    if(t) HST = t;
+    SHOW_HISTORY = true;
+    VD = null;
+    EM = false; OP = null;
+    render();
+}
+
 function wipe(){try{localStorage.setItem(K+'-backup-'+dk(Date.now()),JSON.stringify(S))}catch(e){}
   S.ing.forEach(i=>i.s=0);S.sales=[];S.adj=[];S.buys=[];S.close={};S.log=[];S.logFrom=dk(Date.now());S.setup=false}
 function wipeBtn(){if(armed!=='wp'){armed='wp';return toast('Bấm lần nữa để xoá. Một bản dự phòng được giữ trong máy')}wipe();ALT=null;GIFT=false;DINE=0;VD=null;armed='';ch();toast('Đã đưa tồn kho và lịch sử bán về 0')}
@@ -97,8 +141,29 @@ function mig(){if(!S.fx)S.fx={};if(!S.close)S.close={};if(!S.buys)S.buys=[];S.in
 function pAt(g){if(isT()||!g.h||!g.h.length)return g.p;let v=g.h[0][1];for(const [dt,p] of g.h)if(dt<=VD)v=p;return v}
 function setP(g,p,dt){dt=dt||dk(Date.now());g.h=g.h||[];const e=g.h.find(x=>x[0]===dt);if(e)e[1]=p;else g.h.push([dt,p]);g.h.sort((a,b)=>a[0]<b[0]?-1:1);g.p=g.h[g.h.length-1][1]}
 const stAt=(g,ds)=>+(g.s-sum(S.log.filter(l=>l.i===g.id&&dk(l.t)>ds).map(l=>l.d))).toFixed(4);
-function dbar(){const d0=vdate(),T=dk(Date.now()),Y=dk(Date.now()-864e5);
-  return `<div class="chips" style="margin:0 0 10px;align-items:center"><button class="${d0===T?'on':''}" onclick="sv('${T}')">Hôm nay</button><button class="${d0===Y?'on':''}" onclick="sv('${Y}')">Hôm qua</button><input type="date" value="${d0}" max="${T}" style="width:150px;margin:0" onchange="sv(this.value)"></div>${d0!==T?`<div class="box" style="margin-bottom:10px"><span class="warn">Đang xem lịch sử ngày ${vd(d0)} (chỉ xem)</span> · <a onclick="sv('${T}')" style="color:var(--ac)">về hôm nay</a></div>`:''}`}
+const gsBadge=()=>`<span id="gs" class="mut" style="font-size:11px;margin-left:auto;white-space:nowrap">${gtxt()}</span>`;
+
+/* Hàm thanh điều hướng ngày */
+function dbar(){
+  const d0=vdate(),T=dk(Date.now()),Y=dk(Date.now()-864e5);
+  let barHTML = '';
+  if (tab === 'sell') {
+      if (SHOW_HISTORY) {
+          barHTML = `<div class="chips" style="margin:0 0 10px;align-items:center"><button onclick="sv('${T}')">Quay lại Hôm nay</button><span class="mut" style="font-size:12px;margin:0 6px">Từ:</span><input type="date" value="${HSF}" max="${T}" style="width:130px;margin:0" onchange="setHistRange(this.value, null)"><span class="mut" style="font-size:12px;margin:0 6px">Đến:</span><input type="date" value="${HST}" max="${T}" style="width:130px;margin:0" onchange="setHistRange(null, this.value)">${gsBadge()}</div>`;
+      } else {
+         barHTML = `<div class="chips" style="margin:0 0 10px;align-items:center"><button class="${d0===T?'on':''}" onclick="sv('${T}')">Hôm nay</button><button class="${d0===Y?'on':''}" onclick="sv('${Y}')">Hôm qua</button><input type="date" value="${d0}" max="${T}" style="width:150px;margin:0" onchange="sv(this.value)"><button onclick="setHistRange('${T}', '${T}')">Lịch sử từ ngày...</button>${gsBadge()}</div>`;
+      }
+  } else {
+      barHTML = `<div class="chips" style="margin:0 0 10px;align-items:center"><button class="${d0===T?'on':''}" onclick="sv('${T}')">Hôm nay</button><button class="${d0===Y?'on':''}" onclick="sv('${Y}')">Hôm qua</button><input type="date" value="${d0}" max="${T}" style="width:150px;margin:0" onchange="sv(this.value)">${gsBadge()}</div>`;
+  }
+  
+  if (tab === 'sell' && SHOW_HISTORY) {
+      return barHTML + `<div class="box" style="margin-bottom:10px"><span class="warn">Đang xem lịch sử bán hàng từ ngày ${vd(HSF)} đến ${vd(HST)} (chỉ xem thống kê)</span></div>`;
+  } else {
+      return barHTML + (d0!==T?`<div class="box" style="margin-bottom:10px"><span class="warn">Đang xem lịch sử ngày ${vd(d0)} (chỉ xem)</span> · <a onclick="sv('${T}')" style="color:var(--ac)">về hôm nay</a></div>`:'');
+  }
+}
+
 /* ===== GIÁ THEO NGÀY, NHẬT KÝ, CHỐT NGÀY, SAO LƯU ===== */
 function hedit(i){const id=i.id;return `<small style="margin-top:10px">Lịch sử giá (đ/${esc(i.u)}). Mỗi mức giá có hiệu lực từ ngày đó đến khi có mức giá mới.</small>${(i.h||[]).map(([dt,p],k)=>`<div class="row" style="margin-top:6px"><input type="date" value="${dt}" style="width:140px;margin:0;text-align:left" onchange="eh('${id}',${k},0,this.value)"><input type="number" inputmode="decimal" value="${p}" style="flex:1;width:auto;margin:0" onchange="eh('${id}',${k},1,this.value)"><button class="sm" onclick="dh('${id}',${k})">✕</button></div>`).join('')}<div class="row" style="margin-top:6px"><input id="hd_${id}" type="date" value="${dk(Date.now())}" style="width:140px;margin:0;text-align:left"><input id="hp_${id}" type="number" inputmode="decimal" placeholder="Giá mới" style="flex:1;width:auto;margin:0"><button class="sm" onclick="ah('${id}')">Thêm</button></div>`}
 function eh(id,k,f,v){const g=ing(id);g.h[k][f]=f?(+v||0):(v||dk(Date.now()));g.h.sort((a,b)=>a[0]<b[0]?-1:1);g.p=g.h[g.h.length-1][1];ch()}
@@ -125,17 +190,19 @@ function vClose(){
   <div class="box" style="margin-top:8px">${adjs.map(x=>{const g=ing(x.i);return `<div class="row" style="padding:8px 0"><div>${esc(g.n)}<small>đếm lại ${x.d>0?'+':''}${d(x.d)} ${esc(g.u)}${x.d>0?' · đếm dư, không tính vào lợi nhuận':''}</small></div><b class="${x.d<0?'low':'ok'}">${sg(x.d*g.p)}</b><button class="sm" onclick="adjOff('${x.t}','${x.i}')">Không tính</button></div>`}).join('')||'<p class="mut">Chưa đếm lại nguyên liệu nào trong ngày.</p>'}${adjs.length?`<button style="width:100%;margin-top:8px" onclick="adjOffDay('${ds}')">Không tính cả ngày vào hao hụt (dùng khi chỉ nhập lại tồn ban đầu)</button>`:''}</div>
   <h3 style="color:var(--mut)">3. Nhập hàng trong ngày</h3><div class="box">${bs.map(b=>`<div class="row" style="padding:8px 0"><div>${esc(b.n)}<small>+${d(b.q)} ${esc(b.u)}</small></div><b>${money(b.c)}</b><button class="sm" onclick="delBuy('${b.id}')">✕</button></div>`).join('')||'<p class="mut">Không có lần nhập nào.</p>'}</div>
   <h3 style="color:var(--mut)">4. Báo cáo theo khoảng ngày</h3><div class="box"><div class="g2"><label>Từ ngày<input type="date" value="${a0}" onchange="RF=this.value;render()"></label><label>Đến ngày<input type="date" value="${b0}" onchange="RT=this.value;render()"></label></div>${R('Doanh thu app ghi nhận',money(rrev))}${R('Số hộp (suất chính)',rs.filter(s=>(s.k||'main')==='main').length)}${R('Giá vốn (theo định mức)',money(rc))}${R('Lãi gộp',money(rrev-rc),rrev>=rc?'ok':'low')}${R('Hao phí tặng thêm',money(gift),gift?'warn':'')}${R('Tiền nhập hàng',money(rb))}${R('Thực thu nhập tay ('+cds.length+' ngày)',cds.length?money(creal):'chưa nhập')}${cds.length?R('Chênh lệch thực thu − app (các ngày có nhập)',sg(creal-capp),creal===capp?'ok':'warn'):''}<small style="margin-top:8px">Chênh lệch khi đếm lại theo nguyên liệu (giá hiện tại), âm nhiều nhất ở trên:</small>${hl.map(k=>R(esc(ing(k).n),sg(hao[k]),hao[k]<0?'low':'ok')).join('')||'<p class="mut">Chưa có dữ liệu đếm lại.</p>'}</div>`}
+function resetAll(){if(armed!=='ra'){armed='ra';return toast('Bấm lần nữa để đưa tất cả về 0 (giữ nguyên giá, món, công thức)')}S.ing.forEach(g=>{g.s=0});S.sales=[];S.adj=[];S.buys=[];S.close={};S.fx={};S.log=null;S.setup=true;mig();armed='';tab='more';ch();toast('Đã đưa tất cả về 0. Vào Tồn kho nhập tồn thật, xong thì bỏ tick thiết lập')}
 function zeroStock(){if(armed!=='zs'){armed='zs';return toast('Bấm lần nữa để đặt tồn kho về 0 (giữ nguyên giá, món, công thức)')}S.ing.forEach(g=>{if(g.s){S.log.push({t:Date.now(),i:g.id,k:'set',d:-g.s});g.s=0}});S.setup=true;armed='';ch();toast('Đã đặt tồn về 0. Đang bật thiết lập tồn ban đầu, tắt ở tab Tồn kho khi nhập xong')}
 function clearTest(){if(armed!=='ct'){armed='ct';return toast('Bấm lần nữa để xoá dữ liệu thử (giữ nguyên giá, món, công thức, chi phí cố định)')}S.sales=[];S.adj=[];S.buys=[];S.close={};S.log=null;mig();armed='';ch();toast('Đã xoá dữ liệu thử')}
 function bkCopy(){const t=JSON.stringify(S);S.bk=Date.now();save();try{navigator.clipboard.writeText(t).then(()=>toast('Đã sao chép. Dán vào Ghi chú hoặc Zalo để lưu'),()=>toast('Không sao chép được, hãy chép từ ô bên dưới'))}catch(e){toast('Hãy chép từ ô bên dưới')}render()}
 function bkRestore(){const v=$('#bk').value.trim();try{const o=JSON.parse(v);if(!o.ing||!o.menu||!o.sales)throw 0;S=o;mig();save();toast('Đã khôi phục');render()}catch(e){toast('Nội dung không hợp lệ')}}
 function vMore(){
   const last=S.bk?'Lần sao lưu gần nhất: '+new Date(S.bk).toLocaleString('vi-VN'):'Bạn chưa sao lưu lần nào.';
-  return `<h1>Thêm</h1><h3 style="color:var(--mut)">Bắt đầu nhập thật</h3><div class="box"><small style="margin:6px 0">Giữ nguyên giá nguyên liệu, lịch sử giá, mức báo sắp hết, món, công thức và chi phí cố định. Nên sao lưu trước khi bấm.</small><button style="width:100%;margin-top:6px" onclick="zeroStock()">1. Đặt tồn kho tất cả nguyên liệu về 0</button><button style="width:100%;margin-top:8px" onclick="clearTest()">2. Xoá đơn bán, nhập hàng, đếm lại và chốt ngày thử</button></div>
+  return `<h1>Thêm</h1><h3 style="color:var(--mut)">Đồng bộ Google Sheet</h3><div class="box"><div class="row" style="padding:6px 0"><div>Trạng thái<small id="gs2">${gtxt()}</small></div><button class="sm" onclick="gpush()">Gửi lại ngay</button></div><small style="margin:6px 0">Mỗi lần bạn thao tác, dữ liệu được gửi lên Google Sheet sau 2 giây thông qua Fetch API an toàn.</small></div>
+  <h3 style="color:var(--mut)">Bắt đầu nhập thật</h3><div class="box"><small style="margin:6px 0">Giữ nguyên giá nguyên liệu, lịch sử giá, mức báo sắp hết, món, công thức và chi phí cố định. Nên sao lưu trước khi bấm.</small><button class="pri" style="margin:6px 0 4px" onclick="resetAll()">Đưa TẤT CẢ về 0 để bắt đầu nhập thật</button><small style="margin-bottom:8px">Xoá hết số liệu thử: tồn kho về 0, đơn bán, nhập hàng, đếm lại, tiền thực thu chốt ngày và chi phí cố định (thống kê về 0). Giữ nguyên giá, lịch sử giá, mức báo sắp hết, món và công thức. Bấm 2 lần để xác nhận.</small><small>Hoặc làm từng phần:</small><button style="width:100%;margin-top:6px" onclick="zeroStock()">1. Đặt tồn kho tất cả nguyên liệu về 0</button><button style="width:100%;margin-top:8px" onclick="clearTest()">2. Xoá đơn bán, nhập hàng, đếm lại và chốt ngày thử</button></div>
   <h3 style="color:var(--mut)">Sao lưu &amp; khôi phục</h3><div class="box"><p class="mut">${last}</p><button class="pri" style="margin:0 0 8px" onclick="bkCopy()">Sao chép toàn bộ dữ liệu</button><small>Dán vào Ghi chú hoặc Zalo của bạn để lưu. Khi đổi máy hoặc mất dữ liệu, dán lại vào ô dưới rồi bấm Khôi phục.</small><textarea id="bk" style="width:100%;height:110px;font-size:11px;margin-top:8px;background:var(--card);color:var(--fg);border:1px solid var(--ln);border-radius:10px">${esc(JSON.stringify(S)).replace(/&/g,'&amp;')}</textarea><button style="width:100%;margin-top:8px" onclick="bkRestore()">Khôi phục từ nội dung trong ô</button></div>
   <h3 style="color:var(--mut)">Bắt đầu lại từ 0</h3><div class="box"><small>Đưa tồn kho về 0 và xoá lịch sử bán, nhập hàng, chốt ngày. Giữ nguyên nguyên liệu, giá, công thức, món và chi phí cố định.</small><button style="width:100%;margin-top:8px;color:var(--bad)" onclick="wipeBtn()">Đưa số lượng và lịch sử về 0</button></div>
   <h3 style="color:var(--mut)">Hướng dẫn sử dụng từng bước</h3><div class="box">
-  <details><summary>Bước 0. Bắt đầu nhập thật</summary><ol><li>Tab <b>Thêm</b> → <b>Sao chép toàn bộ dữ liệu</b> để lưu bản cũ (nếu cần).</li><li>Bấm <b>1. Đặt tồn kho về 0</b> (bấm 2 lần để xác nhận). Giá, món, công thức được giữ nguyên.</li><li>Nếu đã bán thử: bấm <b>2. Xoá đơn bán, nhập hàng, đếm lại và chốt ngày thử</b>.</li><li>Tab <b>Tồn kho</b>: gõ số tồn thực tế của từng nguyên liệu. Đang bật <b>thiết lập tồn ban đầu</b> nên không bị tính là hao hụt. Xong thì bỏ tick ô này và bắt đầu bán.</li></ol></details>
+  <details><summary>Bước 0. Bắt đầu nhập thật</summary><ol><li>Tab <b>Thêm</b> → <b>Sao chép toàn bộ dữ liệu</b> để lưu bản cũ (nếu cần).</li><li>Bấm <b>Đưa TẤT CẢ về 0 để bắt đầu nhập thật</b> (bấm 2 lần để xác nhận). Tồn kho, đơn bán, chốt ngày và chi phí cố định thử về 0. Giá, món, công thức được giữ nguyên.</li><li>Muốn làm từng phần: nút <b>1</b> chỉ đưa tồn kho về 0, nút <b>2</b> chỉ xoá đơn bán, nhập hàng, đếm lại và chốt ngày thử.</li><li>Tab <b>Tồn kho</b>: gõ số tồn thực tế của từng nguyên liệu. Đang bật <b>thiết lập tồn ban đầu</b> nên không bị tính là hao hụt. Xong thì bỏ tick ô này và bắt đầu bán.</li></ol></details>
   <details><summary>Bước 1. Nhập nguyên liệu và giá</summary><ol><li>Tab <b>Tồn kho</b> → <b>+ Thêm nguyên liệu</b>, đặt tên, đơn vị (kg, lít, cái...).</li><li>Bấm <b>⋯</b> ở nguyên liệu → ô <b>Giá nhập</b> hoặc <b>Nhập kho</b> (số lượng và tổng tiền thì app tự tính giá).</li><li>Đặt <b>mức báo sắp hết</b> bằng lượng dùng khoảng 1 đến 2 ngày.</li><li>Nhập <b>tồn kho ban đầu</b>: gõ số đếm được vào ô bên phải mỗi nguyên liệu, trước khi bán đơn đầu tiên (chưa có đơn thì không bị tính là hao hụt).</li></ol></details>
   <details><summary>Bước 2. Làm bảng giá vốn cho món</summary><ol><li>Tab <b>Giá vốn</b> → <b>＋ Món mới</b> (hoặc mở món giống nhất rồi <b>Nhân bản món</b>).</li><li>Bấm <b>✎ Sửa công thức</b>, chọn <b>Loại</b>: Suất chính, Ăn thêm hoặc Nước &amp; hàng bán lại.</li><li><b>＋ Thêm thành phần</b>: điền định lượng cho 1 suất, hệ số nở/ngót, phụ gia. Bảng sẽ ghi rõ cách tính từng dòng.</li><li><b>＋ Thêm mức giá bán</b> để làm bảng riêng cho suất đầy đặn hơn (30k...).</li></ol></details>
   <details><summary>Bước 3. Hằng ngày: nhập hàng</summary><ol><li>Tab <b>Tồn kho</b> → <b>⋯</b> → nhập số lượng, tổng tiền, chọn ngày nhập → <b>Nhập kho</b>.</li><li>Nhập nhầm: tab <b>Chốt ngày</b> → mục 3 → <b>✕</b> (kho được trừ lại).</li><li>Giá đổi: sửa ô <b>Giá nhập từ hôm nay</b> (hoặc nhập kho kèm tổng tiền). Giá mới chỉ áp dụng từ hôm nay, tồn kho và giá vốn các ngày cũ giữ nguyên. Đừng sửa các dòng cũ trong Lịch sử giá trừ khi đã nhập sai. Muốn đặt giá cho ngày khác thì thêm mức giá mới ở Lịch sử giá.</li></ol></details>
@@ -152,8 +219,8 @@ function addExtras(){const by=n=>(S.ing.find(x=>x.n===n)||{}).id,mkI=(n,u)=>{let
 const mid=ds=>new Date(ds+'T12:00:00').getTime(),dim=ds=>{const p=ds.split('-');return new Date(+p[0],+p[1],0).getDate()},mstart=()=>dk(Date.now()).slice(0,8)+'01';
 const fxDay=ds=>sum((S.fx[ds.slice(0,7)]||[]).map(x=>x.a))/dim(ds),eachDay=(a,b)=>{const L=[];for(let t=mid(a);dk(t)<=b&&L.length<400;t+=864e5)L.push(dk(t));return L};
 function dayStat(ds){const ss=S.sales.filter(s=>dk(s.t)===ds),cl=S.close[ds],has=!!cl&&(cl.cash!==''||cl.bank!=='');
-  return{ds,rev:sum(ss.map(s=>s.p)),c:sum(ss.map(s=>s.c)),hao:sum(S.adj.filter(x=>dk(x.t)===ds&&ing(x.i)&&x.d<0).map(x=>-x.d*ing(x.i).p)),over:sum(S.adj.filter(x=>dk(x.t)===ds&&ing(x.i)&&x.d>0).map(x=>x.d*ing(x.i).p)),has,real:has?(+cl.cash||0)+(+cl.bank||0):0,fx:fxDay(ds),hop:ss.filter(s=>(s.k||'main')==='main').length}}
-function pl(L,real){const r=L.filter(x=>!real||x.has),rev=sum(r.map(x=>real?x.real:x.rev)),c=sum(r.map(x=>x.c)),hao=sum(r.map(x=>x.hao)),fx=sum(r.map(x=>x.fx));return{n:r.length,rev,c,hao,over:sum(r.map(x=>x.over)),fx,p:rev-c-hao-fx,hop:sum(r.map(x=>x.hop))}}
+  return{ds,rev:sum(ss.map(s=>s.p)),c:sum(ss.map(s=>s.c)),hao:sum(S.adj.filter(x=>dk(x.t)===ds&&ing(x.i)&&x.d<0).map(x=>-x.d*ing(x.i).p)),over:sum(S.adj.filter(x=>dk(x.t)===ds&&ing(x.i)&&x.d>0).map(x=>x.d*ing(x.i).p)),has,real:has?(+cl.cash||0)+(+cl.bank||0):0,fx:fxDay(ds),hop:ss.filter(s=>(s.k||'main')==='main').length, drink:ss.filter(s=>(s.k||'main')==='resale').length}}
+function pl(L,real){const r=L.filter(x=>!real||x.has),rev=sum(r.map(x=>real?x.real:x.rev)),c=sum(r.map(x=>x.c)),hao=sum(r.map(x=>x.hao)),fx=sum(r.map(x=>x.fx));return{n:r.length,rev,c,hao,over:sum(r.map(x=>x.over)),fx,p:rev-c-hao-fx,hop:sum(r.map(x=>x.hop)), drink:sum(r.map(x=>x.drink))}}
 function fxA(m){const n=$('#fxn').value.trim(),a=+$('#fxa').value;if(!n||!(a>=0))return toast('Nhập tên và số tiền');(S.fx[m]=S.fx[m]||[]).push({id:uid(),n,a});ch()}
 function fxE(m,k,f,v){S.fx[m][k][f]=f==='a'?(+v||0):v;ch()}
 function fxD(m,k){S.fx[m].splice(k,1);ch()}
@@ -161,19 +228,33 @@ function fxC(m){const p=m.split('-'),q=new Date(+p[0],+p[1]-2,1),k=q.getFullYear
 function vStat(){
   const a=SF||mstart(),b=ST||dk(Date.now()),L=eachDay(a,b).map(dayStat),A=pl(L,false),B=pl(L,true),nd=L.length||1,fm=FXM||dk(Date.now()).slice(0,7),fl=S.fx[fm]||[],cm=CM||dk(Date.now()).slice(0,7),sg=n=>(n>0?'+':'')+money(n);
   const r3=(l,x,y,c,bd)=>`<div style="display:grid;grid-template-columns:1.5fr 1fr 1fr;gap:6px;padding:8px 0;border-bottom:1px solid var(--ln)"><div>${bd?'<b>'+l+'</b>':l}</div><b style="text-align:right" class="${c||''}">${x}</b><b style="text-align:right" class="${c||''}">${y}</b></div>`;
-  const hopd=A.hop/nd,mg=A.hop?(A.rev-A.c-A.hao)/A.hop:0,fxd=A.fx/nd,be=mg>0?fxd/mg:null;
-  const adv=!A.hop?'Chưa có đơn bán trong khoảng này.':!fxd?'Hãy nhập chi phí cố định (điện, nước, mặt bằng...) ở dưới để app tính điểm hòa vốn.':be===null?'Lãi gộp mỗi suất đang âm, cần xem lại giá bán hoặc định lượng trước.':`Chi phí cố định khoảng ${money(fxd)}/ngày. Mỗi suất bán ra (gồm ăn thêm, nước) mang về lãi gộp khoảng ${money(mg)}. Cần bán ít nhất ${Math.ceil(be)} suất/ngày để hòa vốn, nên đặt mục tiêu ${Math.ceil(be*1.2)} suất/ngày để có lãi. Hiện bán trung bình ${d(hopd,1)} suất/ngày: ${hopd>=be*1.2?'đang có lãi':hopd>=be?'sát hòa vốn':'đang LỖ, thiếu khoảng '+Math.ceil(be-hopd)+' suất/ngày'}.`;
+  const hopd=A.hop/nd,mgA=A.hop?(A.rev-A.c-A.hao)/A.hop:0,mains=S.menu.filter(D=>(D.kind||'main')==='main'),mgM=mains.length?sum(mains.map(D=>{const T=D.tiers.find(t=>t.id===SEL[D.id])||D.tiers[0];return T.price-sum(T.rows.map(r=>rcost(r,T)))}))/mains.length:0,real=A.hop>0&&mgA>0,mg=real?mgA:mgM,fxd=A.fx/nd,be=mg>0?fxd/mg:null;
+  const adv=!(mg>0)?'Chưa tính được lãi gộp mỗi suất. Hãy nhập giá nhập nguyên liệu và công thức món chính trước.':!fxd?'Hãy nhập chi phí cố định (điện, nước, mặt bằng...) ở mục 3 để app tính điểm hòa vốn.':`${real?'Theo đơn bán thật':'Chưa có đơn bán nên tính theo bảng giá vốn của món'}: lãi gộp mỗi suất khoảng ${money(mg)}, chi phí cố định khoảng ${money(fxd)}/ngày. Cần bán ít nhất ${Math.ceil(be)} suất/ngày để hòa vốn, nên đặt mục tiêu ${Math.ceil(be*1.2)} suất/ngày để có lãi.`+(A.hop?` Hiện bán trung bình ${d(hopd,1)} suất/ngày: ${hopd>=be*1.2?'đang có lãi':hopd>=be?'sát hòa vốn':'đang LỖ, thiếu khoảng '+Math.ceil(be-hopd)+' suất/ngày'}.`:'');
   const gs=S.sales.filter(s=>s.free&&dk(s.t)>=a&&dk(s.t)<=b),gc=sum(gs.map(s=>s.c)),pj=PJ!=null?PJ:Math.max(1,Math.round(hopd)||50),md=dim(fm+'-01');
   const nums=[...new Set([20,30,40,50,60,80,100,pj].concat(be&&fxd?[Math.ceil(be)]:[]))].sort((x,y)=>x-y),G='display:grid;grid-template-columns:.8fr 1fr 1fr 1.2fr;gap:6px;';
-  const proj=A.hop&&mg>0?`<h3 style="color:var(--mut);margin:12px 0 6px">Dự kiến bán bao nhiêu suất mỗi ngày thì lãi bao nhiêu</h3><label>Số suất/ngày bạn dự kiến<input type="number" inputmode="numeric" value="${pj}" onchange="PJ=Math.max(0,+this.value||0);render()"></label><div style="${G}font-size:12px;margin-top:8px;padding:6px 0;border-bottom:1px solid var(--ln)" class="mut"><div>Suất/ngày</div><div style="text-align:right">Lãi gộp</div><div style="text-align:right">Chi phí cố định</div><div style="text-align:right">Lãi ròng</div></div>${nums.map(n=>{const lg=n*mg,p=lg-fxd;return `<div style="${G}font-size:13px;padding:6px 0;border-bottom:1px solid var(--ln);${n===pj?'background:rgba(194,65,12,.1);':''}"><div><b>${n}</b>${be&&fxd&&n===Math.ceil(be)?'<small class="warn" style="margin:0">hòa vốn</small>':''}</div><div style="text-align:right">${money(lg)}</div><div style="text-align:right">${money(fxd)}</div><div style="text-align:right"><b class="${p>=0?'ok':'low'}">${sg(p)}/ngày</b><small style="margin:0;text-align:right">${sg(p*md)}/tháng</small></div></div>`}).join('')}<small style="margin-top:6px">Tính theo lãi gộp trung bình mỗi suất trong kỳ đang chọn và chi phí cố định mỗi ngày của tháng ${fm.slice(5)}/${fm.slice(0,4)} (${md} ngày). Lãi ròng chưa trừ hao hụt đếm thiếu.</small>`:'';
+  const proj=mg>0?`<h3 style="color:var(--mut);margin:12px 0 6px">Dự kiến bán bao nhiêu suất mỗi ngày thì lãi bao nhiêu</h3><label>Số suất/ngày bạn dự kiến<input type="number" inputmode="numeric" value="${pj}" onchange="PJ=Math.max(0,+this.value||0);render()"></label><div style="${G}font-size:12px;margin-top:8px;padding:6px 0;border-bottom:1px solid var(--ln)" class="mut"><div>Suất/ngày</div><div style="text-align:right">Lãi gộp</div><div style="text-align:right">Chi phí cố định</div><div style="text-align:right">Lãi ròng</div></div>${nums.map(n=>{const lg=n*mg,p=lg-fxd;return `<div style="${G}font-size:13px;padding:6px 0;border-bottom:1px solid var(--ln);${n===pj?'background:rgba(194,65,12,.1);':''}"><div><b>${n}</b>${be&&fxd&&n===Math.ceil(be)?'<small class="warn" style="margin:0">hòa vốn</small>':''}</div><div style="text-align:right">${money(lg)}</div><div style="text-align:right">${money(fxd)}</div><div style="text-align:right"><b class="${p>=0?'ok':'low'}">${sg(p)}/ngày</b><small style="margin:0;text-align:right">${sg(p*md)}/tháng</small></div></div>`}).join('')}<small style="margin-top:6px">${real?'Tính theo lãi gộp trung bình mỗi suất của đơn bán thật trong kỳ đang chọn':'Chưa có đơn bán nên tính theo lãi gộp mỗi suất của bảng giá vốn (trung bình các món chính)'} và chi phí cố định mỗi ngày của tháng ${fm.slice(5)}/${fm.slice(0,4)} (${md} ngày). Lãi ròng chưa trừ hao hụt đếm thiếu.</small>`:'';
   const sb=dk(mid(a)-864e5),cp=cm.split('-'),first=new Date(+cp[0],+cp[1]-1,1).getDay(),off=(first+6)%7,cdays=eachDay(cm+'-01',cm+'-'+String(dim(cm+'-01')).padStart(2,'0')).map(dayStat),T=dk(Date.now());
   const pa2=x=>x.rev-x.c-x.hao-x.fx,pr2=x=>x.has?x.real-x.c-x.hao-x.fx:null,mtA=sum(cdays.map(pa2)),mtR=sum(cdays.map(x=>pr2(x)||0)),nR=cdays.filter(x=>x.has).length;
+  
   return `<h1>Thống kê</h1><div class="chips"><button onclick="SF=mstart();ST=null;render()">Tháng này</button><button onclick="SF=dk(Date.now()-6*864e5);ST=null;render()">7 ngày</button><button onclick="SF=dk(Date.now()-29*864e5);ST=null;render()">30 ngày</button></div><div class="g2"><label>Từ ngày<input type="date" value="${a}" onchange="SF=this.value;render()"></label><label>Đến ngày<input type="date" value="${b}" onchange="ST=this.value;render()"></label></div>
   <h3 style="color:var(--mut)">1. Bài toán lợi nhuận</h3><div class="box">${r3('','Theo app','Thực thu nhập tay',0,1)}${r3('Số ngày',A.n,B.n)}${r3('Doanh thu',money(A.rev),B.n?money(B.rev):'—')}${r3('− Vốn nguyên liệu (định mức)',money(A.c),B.n?money(B.c):'—')}${r3('− Hao hụt (đếm thiếu)',money(A.hao),B.n?money(B.hao):'—')}${r3('− Chi phí cố định',money(A.fx),B.n?money(B.fx):'—')}${r3('= Lợi nhuận',sg(A.p),B.n?sg(B.p):'—',A.p>=0?'ok':'low',1)}${r3('Lợi nhuận mỗi ngày',sg(A.p/(A.n||1)),B.n?sg(B.p/B.n):'—')}<small>Cột thực thu chỉ tính các ngày bạn đã nhập tiền ở tab Chốt ngày (${B.n}/${A.n} ngày). Hao hụt chỉ tính khi đếm ra ít hơn app, theo giá hiện tại. Đếm dư không được tính là lợi nhuận (trong kỳ: ${money(A.over)}). Nếu vừa nhập lại tồn ban đầu, vào Chốt ngày bấm Không tính ở các dòng đếm lại.</small><small>Tiền nhập hàng trong kỳ: ${money(sum(S.buys.filter(x=>dk(x.t)>=a&&dk(x.t)<=b).map(x=>x.c)))}</small></div>
-  <h3 style="color:var(--mut)">2. Bán bao nhiêu suất mỗi ngày thì có lãi</h3><div class="box"><div class="row" style="padding:6px 0"><div>Tổng suất chính</div><b>${A.hop}</b></div><div class="row" style="padding:6px 0"><div>Trung bình mỗi ngày</div><b>${d(hopd,1)} suất</b></div><div class="row" style="padding:6px 0"><div>Lãi gộp mỗi suất</div><b>${money(mg)}</b></div><div class="row" style="padding:6px 0"><div>Chi phí cố định mỗi ngày</div><b>${money(fxd)}</b></div><div class="row" style="padding:6px 0"><div>Tặng thêm không thu tiền<small>${gs.length} lần, chi phí đã nằm trong vốn</small></div><b class="${gc?'warn':''}">${money(gc)}${A.rev?' ('+d(gc/A.rev*100,1)+'% doanh thu)':''}</b></div><div class="row" style="padding:6px 0"><div>Hòa vốn cần</div><b>${be===null||!fxd?'—':Math.ceil(be)+' suất/ngày'}</b></div><small style="margin-top:6px">${adv}</small>${proj}</div>
+  <h3 style="color:var(--mut)">2. Bán bao nhiêu suất mỗi ngày thì có lãi</h3><div class="box"><div class="row" style="padding:6px 0"><div>Tổng suất chính</div><b>${A.hop} hộp</b></div><div class="row" style="padding:6px 0"><div>Tổng nước &amp; hàng bán lại</div><b>${A.drink} chai/lốc</b></div><div class="row" style="padding:6px 0"><div>Trung bình mỗi ngày</div><b>${d(hopd,1)} suất</b></div><div class="row" style="padding:6px 0"><div>Lãi gộp mỗi suất</div><b>${money(mg)}</b></div><div class="row" style="padding:6px 0"><div>Chi phí cố định mỗi ngày</div><b>${money(fxd)}</b></div><div class="row" style="padding:6px 0"><div>Tặng thêm không thu tiền<small>${gs.length} lần, chi phí đã nằm trong vốn</small></div><b class="${gc?'warn':''}">${money(gc)}${A.rev?' ('+d(gc/A.rev*100,1)+'% doanh thu)':''}</b></div><div class="row" style="padding:6px 0"><div>Hòa vốn cần</div><b>${be===null||!fxd?'—':Math.ceil(be)+' suất/ngày'}</b></div><small style="margin-top:6px">${adv}</small>${proj}</div>
   <h3 style="color:var(--mut)">3. Chi phí cố định theo tháng</h3><div class="box"><label>Tháng<input type="month" value="${fm}" onchange="FXM=this.value;render()"></label>${fl.map((x,k)=>`<div class="row" style="margin-top:6px"><input value="${esc(x.n)}" style="flex:1;width:auto;margin:0;text-align:left" onchange="fxE('${fm}',${k},'n',this.value)"><input type="number" inputmode="decimal" value="${x.a}" style="width:110px;margin:0" onchange="fxE('${fm}',${k},'a',this.value)"><button class="sm" onclick="fxD('${fm}',${k})">✕</button></div>`).join('')}<div class="row" style="margin-top:6px"><input id="fxn" placeholder="Điện, nước, mặt bằng, lương..." style="flex:1;width:auto;margin:0;text-align:left"><input id="fxa" type="number" inputmode="decimal" placeholder="đ/tháng" style="width:110px;margin:0"><button class="sm" onclick="fxA('${fm}')">Thêm</button></div><small>Tổng ${money(sum(fl.map(x=>x.a)))}/tháng, chia đều ${money(fxDay(fm+'-01'))}/ngày (${dim(fm+'-01')} ngày).</small><button style="width:100%;margin-top:8px" onclick="fxC('${fm}')">Sao chép từ tháng trước</button></div>
   <h3 style="color:var(--mut)">4. Lịch lãi/lỗ</h3><div class="box"><label>Tháng<input type="month" value="${cm}" onchange="CM=this.value;render()"></label><small style="margin:6px 0">Mỗi ô có 2 dòng: <b>dòng trên theo app</b>, <b>dòng dưới theo thực thu nhập tay</b>. Chạm vào ô để xem ngày đó.</small><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center;font-size:11px">${['T2','T3','T4','T5','T6','T7','CN'].map(x=>`<small style="margin:0;text-align:center">${x}</small>`).join('')}${'<div></div>'.repeat(off)}${cdays.map(x=>{const a1=pa2(x),b1=pr2(x),fut=x.ds>T,cc=v=>v===null||fut?'mut':v>=0?'ok':'low',fv=v=>v===null||fut?'—':d(v/1000,1)+'k';return `<div onclick="sv('${x.ds}');go('sell')" style="cursor:pointer;border:1px solid var(--ln);border-radius:8px;padding:3px 0;${fut?'opacity:.35;':''}"><div class="mut">${+x.ds.slice(8)}</div><b class="${cc(a1)}" style="font-size:10px;display:block">${fv(a1)}</b><b class="${cc(b1)}" style="font-size:10px;display:block">${fv(b1)}</b></div>`}).join('')}</div><div class="row" style="padding:8px 0;margin-top:8px"><div>Tổng tháng theo app</div><b class="${mtA>=0?'ok':'low'}">${sg(mtA)}</b></div><div class="row" style="padding:8px 0"><div>Tổng tháng theo thực thu nhập tay<small>${nR} ngày đã nhập</small></div><b class="${mtR>=0?'ok':'low'}">${nR?sg(mtR):'—'}</b></div></div>
   <h3 style="color:var(--mut)">5. Tồn kho trong kỳ</h3><div class="box">${S.ing.map(g=>{const lg=S.log.filter(l=>l.i===g.id&&dk(l.t)>=a&&dk(l.t)<=b),f=k=>sum(lg.filter(l=>l.k===k).map(l=>l.d)),inn=f('in'),us=f('sell'),ad=f('adj')+f('set');return `<div class="ing"><b>${esc(g.n)}</b><small>Đầu kỳ ${d(stAt(g,sb))} → cuối kỳ ${d(stAt(g,b))} ${esc(g.u)}</small><small>nhập +${d(inn)} · dùng ${d(us)} · đếm lại ${ad>0?'+':''}${d(ad)}</small></div>`}).join('')}<small style="margin-top:6px">Giá trị tồn cuối kỳ: ${money(sum(S.ing.map(g=>Math.max(0,stAt(g,b))*g.p)))} (theo giá hiện tại)</small></div>`}
+/* ===== BẢNG GỬI LÊN GOOGLE SHEET ===== */
+function buildTables(){const v=VD;VD=null;try{
+  const T={},nm=id=>ing(id)?ing(id).n:'(đã xoá)',kn={main:'Suất chính',extra:'Ăn thêm',resale:'Hàng bán lại'},tm=t=>new Date(t).toLocaleString('vi-VN');
+  T.TonKho={head:['Nguyên liệu','Đơn vị','Tồn','Giá nhập (đ/đơn vị)','Mức báo sắp hết','Giá trị tồn (đ)','Trạng thái'],rows:S.ing.map(g=>[g.n,g.u,g.s,g.p,g.low,Math.round(Math.max(0,g.s)*g.p),g.s<=0?'Hết':g.s<=g.low?'Sắp hết':'Đủ'])};
+  T.DonBan={head:['Thời gian','Ngày','Món','Loại','Giá bán','Giá vốn','Tặng','Phần tặng','Ăn tại chỗ'],rows:S.sales.map(x=>[tm(x.t),dk(x.t),x.d,kn[x.k||'main'],x.p,Math.round(x.c),x.free?'x':'',x.part&&x.part<1?Math.round(x.part*100)+'%':'',x.dine?'x':''])};
+  T.NhapHang={head:['Thời gian','Ngày','Nguyên liệu','Số lượng','Đơn vị','Tổng tiền (đ)','Giá/đơn vị (đ)'],rows:S.buys.map(b=>[tm(b.t),dk(b.t),b.n,b.q,b.u,b.c,b.q?Math.round(b.c/b.q):0])};
+  T.DemTon={head:['Thời gian','Ngày','Nguyên liệu','Chênh lệch','Đơn vị','Giá trị (đ)'],rows:S.adj.map(a=>[tm(a.t),dk(a.t),nm(a.i),a.d,ing(a.i)?ing(a.i).u:'',ing(a.i)?Math.round(a.d*ing(a.i).p):0])};
+  T.ChotNgay={head:['Ngày','Tiền mặt','Chuyển khoản','Thực thu','Doanh thu app','Chênh lệch (thực thu − app)'],rows:Object.keys(S.close).sort().map(ds=>{const x=dayStat(ds);return[ds,+S.close[ds].cash||0,+S.close[ds].bank||0,x.has?x.real:'',x.rev,x.has?x.real-x.rev:'']})};
+  const ds0=[...S.sales.map(x=>dk(x.t)),...Object.keys(S.close)].sort()[0];
+  T.ThongKeNgay={head:['Ngày','Số hộp','Nước/Bán lại','Doanh thu app','Thực thu nhập tay','Vốn nguyên liệu','Hao hụt','Chi phí cố định/ngày','Lợi nhuận theo app','Lợi nhuận theo thực thu'],rows:(ds0?eachDay(ds0,dk(Date.now())):[]).map(dayStat).map(x=>[x.ds,x.hop,x.drink,x.rev,x.has?x.real:'',Math.round(x.c),Math.round(x.hao),Math.round(x.fx),Math.round(x.rev-x.c-x.hao-x.fx),x.has?Math.round(x.real-x.c-x.hao-x.fx):''])};
+  T.ChiPhiCoDinh={head:['Tháng','Khoản','Số tiền (đ/tháng)'],rows:Object.keys(S.fx).sort().flatMap(m=>S.fx[m].map(x=>[m,x.n,x.a]))};
+  T.GiaVon={head:['Món','Loại','Giá bán','Giá vốn','Lãi mỗi phần','Giá vốn / giá bán (%)'],rows:S.menu.flatMap(D=>D.tiers.map(Tr=>{const c=sum(Tr.rows.map(r=>rcost(r,Tr)));return[D.n,kn[D.kind||'main'],Tr.price,Math.round(c),Math.round(Tr.price-c),Tr.price?+(c/Tr.price*100).toFixed(1):0]}))};
+  return T}finally{VD=v}}
 /* ===== TÌM KIẾM ===== */
 let Q='';
 const nrm=s=>String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D').toLowerCase();
@@ -242,18 +323,49 @@ const dkn=()=>dk(Date.now());
 function usage(T,nopack){const m={},add=(id,b)=>{const g=ing(id);if(g)m[id]=(m[id]||0)+b/fac(g.u)};
   T.rows.forEach(r=>{if(nopack&&r.t==='s')return;if(r.t==='m')add(r.ing,rawOf(r));else if(r.t==='a'){const b=T.rows.find(x=>x.id===r.of),raw=b?rawOf(b):0;r.lines.forEach(([i,q])=>add(i,q*raw/1000))}else if(r.t==='c'){const f=r.out?r.qty/r.out:0;r.lines.forEach(([i,q])=>add(i,q*f))}else r.lines.forEach(([i,q])=>add(i,q))});return m}
 function canT(T,np){const u=usage(T,np);let best=Infinity,lim=null;for(const i in u){const g=ing(i);if(!g||u[i]<=0)continue;const n=Math.max(0,Math.floor(g.s/u[i]+1e-9));if(n<best){best=n;lim=g}}return{n:best===Infinity?null:best,lim}}
-function sell(did,tid,fr){if(!isT())return toast('Đang xem lịch sử. Bấm Hôm nay để bán hàng');
+function sell(did,tid,fr){if(!isT() || SHOW_HISTORY)return toast('Đang xem lịch sử. Bấm Hôm nay để bán hàng');
   const {T,D}=FT(tid),dine=dineOn(),u=usage(T,dine),use={},low=[],free=!!(fr||GIFT),p=free?0:(ALT!=null?ALT:T.price),part=fr?Math.max(0,Math.min(100,gfv(D)))/100:1;for(const i in u)u[i]*=part;
   for(const i in u){const g=ing(i),b=st(g);use[i]=u[i];g.s=+(g.s-u[i]).toFixed(4);S.log.push({t:Date.now(),i,k:'sell',d:-u[i]});if(b===0&&st(g)>0)low.push(g.n+(g.s<0?' (âm kho)':''))}
   S.sales.push({id:uid(),t:Date.now(),d:D.n,tid,tp:T.price,p,c:sum(T.rows.filter(r=>!(dine&&r.t==='s')).map(r=>rcost(r,T)))*part,use,k:D.kind||'main',free,dine,part});
   ALT=null;GIFT=false;if(dine)DINE=Date.now();ch();if(low.length)toast('⚠ Sắp hết: '+low.join(', '))}
-function undoT(tid){if(!isT())return;const j=S.sales.map(s=>dk(s.t)===dkn()&&s.tid===tid).lastIndexOf(true);if(j<0)return toast('Chưa có đơn nào để bớt');const s=S.sales[j];for(const i in s.use)if(ing(i)){ing(i).s=+(ing(i).s+s.use[i]).toFixed(4);S.log.push({t:Date.now(),i,k:'sell',d:s.use[i]})}S.sales.splice(j,1);ch()}
+function undoT(tid){if(!isT() || SHOW_HISTORY)return;const j=S.sales.map(s=>dk(s.t)===dkn()&&s.tid===tid).lastIndexOf(true);if(j<0)return toast('Chưa có đơn nào để bớt');const s=S.sales[j];for(const i in s.use)if(ing(i)){ing(i).s=+(ing(i).s+s.use[i]).toFixed(4);S.log.push({t:Date.now(),i,k:'sell',d:s.use[i]})}S.sales.splice(j,1);ch()}
 const dineOn=()=>DINE&&Date.now()-DINE<3e5;
-function undoS(k){if(!isT())return;const j=S.sales.map(s=>dk(s.t)===dkn()&&s.tid+'|'+s.p+'|'+(s.part||1)===k).lastIndexOf(true);if(j<0)return;const s=S.sales[j];for(const i in s.use)if(ing(i)){ing(i).s=+(ing(i).s+s.use[i]).toFixed(4);S.log.push({t:Date.now(),i,k:'sell',d:s.use[i]})}S.sales.splice(j,1);ch()}
+function undoS(k){if(!isT() || SHOW_HISTORY)return;const j=S.sales.map(s=>dk(s.t)===dkn()&&s.tid+'|'+s.p+'|'+(s.part||1)===k).lastIndexOf(true);if(j<0)return;const s=S.sales[j];for(const i in s.use)if(ing(i)){ing(i).s=+(ing(i).s+s.use[i]).toFixed(4);S.log.push({t:Date.now(),i,k:'sell',d:s.use[i]})}S.sales.splice(j,1);ch()}
 function vSell(){
-  const T0=isT(),ds=vdate(),ts=S.sales.filter(s=>dk(s.t)===ds),rev=sum(ts.map(s=>s.p)),cst=sum(ts.map(s=>s.c)),g={},when=T0?'hôm nay':'ngày '+vd(ds),kd=D=>D.kind||'main',mainN=z=>z.filter(s=>(s.k||'main')==='main').length;
+  const T0 = isT() && !SHOW_HISTORY;
+  const ds = vdate();
+  const inRange = t => {
+      const dt = dk(t);
+      if (SHOW_HISTORY) return dt >= HSF && dt <= HST;
+      return dt === ds;
+  };
+  
+  const ts=S.sales.filter(s=>inRange(s.t));
+  const rev=sum(ts.map(s=>s.p)), cst=sum(ts.map(s=>s.c)), g={};
+  const when = T0 ? 'hôm nay' : (SHOW_HISTORY ? `từ ${vd(HSF)} đến ${vd(HST)}` : 'ngày '+vd(ds));
+  const kd=D=>D.kind||'main';
+  const mainN=z=>z.filter(s=>(s.k||'main')==='main').length;
+  const drinkN=z=>z.filter(s=>(s.k||'main')==='resale').length;
+
   ts.forEach(s=>{const k=s.tid+'|'+s.p+'|'+(s.part||1);g[k]=g[k]||{l:s.d+' '+pk(s.tp)+(s.p===0&&s.tp>0?(s.part&&s.part<1?' 🎁 tặng '+Math.round(s.part*100)+'% phần':' 🎁 tặng nguyên phần'):s.p!==s.tp?' (bán '+money(s.p)+')':'')+(s.dine?' · tại chỗ':''),p:s.p,q:0};g[k].q++});
-  const adj=sum(S.adj.filter(a=>dk(a.t)===ds&&ing(a.i)).map(a=>a.d*ing(a.i).p)),val=sum(S.ing.map(i=>Math.max(0,stAt(i,ds))*pAt(i))),nl=S.ing.filter(st).length,cl=S.close[ds],has=cl&&(cl.cash!==''||cl.bank!==''),real=cl?(+cl.cash||0)+(+cl.bank||0):0,gift=sum(ts.filter(s=>s.free).map(s=>s.c)),dn=dineOn();
+  
+  const adj=sum(S.adj.filter(a=>inRange(a.t)&&ing(a.i)).map(a=>a.d*ing(a.i).p));
+  const val=sum(S.ing.map(i=>Math.max(0,stAt(i, (SHOW_HISTORY ? HST : ds)))*pAt(i)));
+  const nl=S.ing.filter(st).length;
+  
+  let real = 0, has = false;
+  if (SHOW_HISTORY) {
+      const cds = Object.keys(S.close).filter(x=> x>=HSF && x<=HST && (S.close[x].cash!=='' || S.close[x].bank!==''));
+      has = cds.length > 0;
+      real = sum(cds.map(x=>(+S.close[x].cash||0)+(+S.close[x].bank||0)));
+  } else {
+      const cl = S.close[ds];
+      has = !!cl && (cl.cash!=='' || cl.bank!=='');
+      real = cl ? (+cl.cash||0)+(+cl.bank||0) : 0;
+  }
+  
+  const gift=sum(ts.filter(s=>s.free).map(s=>s.c)), dn=dineOn();
+  
   const selT=D=>D.tiers.find(t=>t.id===SEL[D.id])||D.tiers[0];
   const card=D=>{const T=selT(D),ids=D.tiers.map(t=>t.id),z=ts.filter(s=>ids.includes(s.tid)),c=canT(T,dn),k=c.lim?st(c.lim):0,w=k===2?'low':k===1?'warn':'mut';
     return `<div class="box" style="margin-bottom:10px;padding:10px 12px"><div class="row" style="padding:0"><div><b>${esc(D.n)}</b><small class="${w}">${c.n===null?'':'còn ~'+c.n+' phần'+(k?' · '+esc(c.lim.n)+(k===2?' hết':' sắp hết'):'')}</small></div><div style="text-align:right;flex:none"><b>${z.length}</b> phần<small>${money(sum(z.map(s=>s.p)))}</small></div></div><div class="chips" style="margin:8px 0 6px">${D.tiers.map(t=>`<button class="${t.id===T.id?'on':''}" onclick="SEL['${D.id}']='${t.id}';render()">${t.id===T.id?'☑':'☐'} ${pk(t.price)}</button>`).join('')}</div><button class="pri" style="margin:0;padding:11px" onclick="sell('${D.id}','${T.id}')">＋ Thêm 1 · ${money(GIFT?0:ALT!=null?ALT:T.price)}</button><div class="g2" style="margin:8px 0 0">${kd(D)==='main'?'':`<button onclick="sell('${D.id}','${T.id}',1)">🎁 Tặng 1 tí (${gl(D,T)})</button>`}<button onclick="undoT('${T.id}')" ${kd(D)==='main'?'style="grid-column:1/-1"':''}>− Bớt 1</button></div></div>`};
@@ -265,12 +377,22 @@ function vSell(){
   const gridMain=()=>{const L=S.menu.filter(D=>kd(D)==='main');return L.length?`<h3 style="color:var(--mut)">Suất chính</h3><div class="grid">${L.map(tile).join('')}</div>`:''};
   const days=[];for(let k=0;k<7;k++){const x=dk(Date.now()-k*864e5),z=S.sales.filter(s=>dk(s.t)===x);days.push({x,n:mainN(z),rev:sum(z.map(s=>s.p)),c:sum(z.map(s=>s.c))})}
   const bk=!S.bk||Date.now()-S.bk>6048e5;
-  return `<h1>Bán hàng ${when}</h1><div class="stats"><div class="stat"><small>Doanh thu</small><b>${money(rev)}</b></div><div class="stat"><small>Số hộp (suất chính)</small><b>${mainN(ts)}</b></div><div class="stat"><small>Giá vốn (theo định mức)</small><b>${money(cst)}</b></div><div class="stat"><small>Lãi gộp</small><b class="${rev>=cst?'ok':'low'}">${money(rev-cst)}</b></div><div class="stat"><small>Hao phí tặng thêm</small><b class="${gift?'warn':''}">${money(gift)}</b><small>${ts.filter(s=>s.free).length} lần tặng</small></div><div class="stat" onclick="go('close')"><small>Thực thu (nhập tay)</small><b>${has?money(real):'chưa nhập'}</b></div><div class="stat"><small>Giá trị tồn kho${T0?'':' cuối ngày'}</small><b>${money(val)}</b></div><div class="stat"><small>Chênh lệch khi đếm lại</small><b class="${adj<0?'low':'ok'}">${adj>0?'+':''}${money(adj)}</b></div></div>
+  
+  return `<h1>Bán hàng ${when}</h1><div class="stats">
+  <div class="stat"><small>Doanh thu</small><b>${money(rev)}</b></div>
+  <div class="stat"><small>Số hộp (suất chính)</small><b>${mainN(ts)}</b></div>
+  <div class="stat"><small>Nước &amp; Bán lại</small><b>${drinkN(ts)} chai/lốc</b></div>
+  <div class="stat"><small>Giá vốn (định mức)</small><b>${money(cst)}</b></div>
+  <div class="stat"><small>Lãi gộp</small><b class="${rev>=cst?'ok':'low'}">${money(rev-cst)}</b></div>
+  <div class="stat"><small>Hao phí tặng thêm</small><b class="${gift?'warn':''}">${money(gift)}</b><small>${ts.filter(s=>s.free).length} lần tặng</small></div>
+  <div class="stat" onclick="go('close')"><small>Thực thu (nhập tay)</small><b>${has?money(real):'chưa nhập'}</b></div>
+  <div class="stat"><small>Giá trị tồn kho${T0?'':' cuối kỳ'}</small><b>${money(val)}</b></div>
+  </div>
   ${T0&&bk?`<div class="box" style="margin-bottom:10px;cursor:pointer" onclick="go('more')"><span class="warn">⚠ Chưa sao lưu dữ liệu trong 7 ngày.</span> Bấm để sao lưu.</div>`:''}
   ${T0&&nl?`<div class="box" style="margin-bottom:10px;cursor:pointer" onclick="go('low')"><span class="warn">⚠ ${nl} nguyên liệu sắp hết hoặc đã hết</span> · bấm để xem</div>`:''}
   ${T0?`${GIFT||ALT!=null||dn?`<div class="box" style="border-color:var(--bad);margin-bottom:10px"><b class="low">${[dn?'ĂN TẠI CHỖ (không trừ hộp, thìa, túi)':'',GIFT?'TẶNG NGUYÊN PHẦN: lần chạm tiếp theo tính 0đ':'',ALT!=null?'Giá khác '+money(ALT)+' cho lần chạm tiếp theo':''].filter(Boolean).join(' · ')}</b> · <a onclick="ALT=null;GIFT=false;DINE=0;render()" style="color:var(--ac)">tắt hết</a></div>`:''}
   <div class="chips"><button class="${dn?'on':''}" onclick="DINE=dineOn()?0:Date.now();render()">🍽 Ăn tại chỗ</button><button class="${GIFT?'on':''}" onclick="GIFT=!GIFT;ALT=null;render()">🎁 Tặng nguyên phần (0đ)</button><input type="number" inputmode="decimal" placeholder="Bán giá khác (đ)" value="${ALT??''}" style="width:150px;margin:0" onchange="ALT=this.value===''?null:+this.value;GIFT=false;render()"></div>
-  ${gridMain()}${grp('extra','Ăn thêm (mỗi món là một dòng riêng, không gộp vào suất)')}${grp('resale','Nước &amp; hàng bán lại')}`:'<p class="mut">Đang xem lịch sử, chỉ xem. Bấm Hôm nay để bán hàng.</p>'}
+  ${gridMain()}${grp('extra','Ăn thêm (mỗi món là một dòng riêng, không gộp vào suất)')}${grp('resale','Nước &amp; hàng bán lại')}`:'<p class="mut">Đang xem lịch sử khoảng ngày, chỉ xem số liệu tổng kết. Bấm Quay lại Hôm nay để trở về giao diện bán hàng.</p>'}
   <h3 style="color:var(--mut)">Đã bán ${when}</h3><div class="box">${Object.keys(g).map(k=>`<div class="row" style="padding:8px 0"><div>${esc(g[k].l)}</div><span>× ${g[k].q}</span><b style="min-width:90px;text-align:right">${money(g[k].p*g[k].q)}</b>${T0?`<button class="sm" onclick="undoS('${k}')">−</button>`:''}</div>`).join('')||'<p class="mut">Không có đơn nào.</p>'}</div>
   <h3 style="color:var(--mut)">7 ngày gần nhất (chạm để xem)</h3><div class="box">${days.map(x=>`<div class="row" style="padding:8px 0;cursor:pointer" onclick="sv('${x.x}')"><div>${vd(x.x)}${x.x===ds?' <span class="ok">· đang xem</span>':''}<small>${x.n} hộp · lãi ${money(x.rev-x.c)}</small></div><b>${money(x.rev)}</b></div>`).join('')}</div>`}
 /* ===== KHO ===== */
@@ -320,6 +442,10 @@ function addIng(){const n={id:uid(),n:'Nguyên liệu mới',u:'kg',p:0,s:0,low:
 function del(id){if(armed!==id){armed=id;return toast('Bấm lần nữa để xoá')}S.ing=S.ing.filter(x=>x.id!==id);S.menu.forEach(D=>D.tiers.forEach(T=>T.rows.forEach(r=>{if(r.lines)r.lines=r.lines.filter(l=>l[0]!==id)})));OP=null;armed='';ch()}
 function reset(){if(armed!=='rs'){armed='rs';return toast('Bấm lần nữa để xoá hết và đặt lại')}S=seed();S.v=5;S.tg=40;S.er=10;S.sales=[];S.adj=[];S.menu=mseed();mig();addExtras();VD=null;OD='d1';OP=null;EM=false;armed='';ch()}
 render();
+gpull();
 </script>
 </body>
 </html>
+```eof
+
+Chỉ cần sao chép tệp này, thêm URL Google Apps Script của bạn ở dòng `const API_URL = '...';` là xong.
