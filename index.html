@@ -73,7 +73,7 @@ function mseed(){
   return[{id:'d1',n:'Xôi thịt kho',tiers:[T(25000,155,155/110,40),T(30000,190,1.6,50)]}]}
 
 /* --- KẾT NỐI API GOOGLE SHEETS VÀ FETCH API --- */
-const API_URL = 'https://script.google.com/macros/s/AKfycbyV0ts9bTPoCJnzcYh5UM2XukZ49nF4CWDAa9Y_UWHSR1rjo7mtYwYbGd_DgQ-HawX3/exec'; // Hãy điền link Google Apps Script vào đây
+const API_URL = '[https://script.google.com/macros/s/AKfycbyV0ts9bTPoCJnzcYh5UM2XukZ49nF4CwDAa9Y_UwHSR1rjo7mtYwYbGd_DgQ-HawX3/exec](https://script.google.com/macros/s/AKfycbyV0ts9bTPoCJnzcYh5UM2XukZ49nF4CwDAa9Y_UwHSR1rjo7mtYwYbGd_DgQ-HawX3/exec)';
 
 let GST='',gT=null,gBusy=false,gDirty=false;
 const gtxt=()=>'☁ '+(GST||'sẵn sàng');
@@ -83,14 +83,17 @@ function qsync(){gDirty=true;clearTimeout(gT);gT=setTimeout(gpush,1500)}
 function gpush(){
   if(gBusy){gDirty=true;return}
   gBusy=true;gDirty=false;gst('đang gửi...');
-  if(API_URL === 'ĐIỀN_LINK_CỦA_BẠN_VÀO_ĐÂY') {
+  if(!API_URL || API_URL.indexOf('http')!==0) {
       gBusy=false; gst('chưa gắn link Sheets'); return;
   }
+  const payload = JSON.stringify({state: JSON.stringify(S), tables: JSON.stringify(buildTables())});
   fetch(API_URL, {
     method: 'POST',
-    headers: {'Content-Type': 'text/plain'}, // Dùng text/plain để tránh lỗi chặn CORS
-    body: JSON.stringify({state: JSON.stringify(S), tables: JSON.stringify(buildTables())})
-  }).then(r=>r.json()).then(res=>{
+    mode: 'no-cors',
+    headers: {'Content-Type': 'text/plain;charset=utf-8'},
+    body: payload,
+    redirect: 'follow'
+  }).then(()=>{
     gBusy=false;gst('đã đồng bộ '+new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'}));
     if(gDirty)gpush();
   }).catch(e=>{
@@ -123,10 +126,10 @@ const vd=s=>s.split('-').reverse().join('/');
 const vdate=()=>VD||dk(Date.now()),isT=()=>!VD||VD===dk(Date.now());
 function sv(v){VD=v&&v!==dk(Date.now())?v:null;if(VD){EM=false;OP=null} SHOW_HISTORY=false; render()}
 
-/* Hàm đổi khoảng thời gian lọc lịch sử */
 function setHistRange(f, t) {
     if(f) HSF = f;
     if(t) HST = t;
+    if(HSF > HST) { const tmp = HSF; HSF = HST; HST = tmp; }
     SHOW_HISTORY = true;
     VD = null;
     EM = false; OP = null;
@@ -143,7 +146,6 @@ function setP(g,p,dt){dt=dt||dk(Date.now());g.h=g.h||[];const e=g.h.find(x=>x[0]
 const stAt=(g,ds)=>+(g.s-sum(S.log.filter(l=>l.i===g.id&&dk(l.t)>ds).map(l=>l.d))).toFixed(4);
 const gsBadge=()=>`<span id="gs" class="mut" style="font-size:11px;margin-left:auto;white-space:nowrap">${gtxt()}</span>`;
 
-/* Hàm thanh điều hướng ngày */
 function dbar(){
   const d0=vdate(),T=dk(Date.now()),Y=dk(Date.now()-864e5);
   let barHTML = '';
@@ -367,8 +369,6 @@ function vSell(){
   const gift=sum(ts.filter(s=>s.free).map(s=>s.c)), dn=dineOn();
   
   const selT=D=>D.tiers.find(t=>t.id===SEL[D.id])||D.tiers[0];
-  const card=D=>{const T=selT(D),ids=D.tiers.map(t=>t.id),z=ts.filter(s=>ids.includes(s.tid)),c=canT(T,dn),k=c.lim?st(c.lim):0,w=k===2?'low':k===1?'warn':'mut';
-    return `<div class="box" style="margin-bottom:10px;padding:10px 12px"><div class="row" style="padding:0"><div><b>${esc(D.n)}</b><small class="${w}">${c.n===null?'':'còn ~'+c.n+' phần'+(k?' · '+esc(c.lim.n)+(k===2?' hết':' sắp hết'):'')}</small></div><div style="text-align:right;flex:none"><b>${z.length}</b> phần<small>${money(sum(z.map(s=>s.p)))}</small></div></div><div class="chips" style="margin:8px 0 6px">${D.tiers.map(t=>`<button class="${t.id===T.id?'on':''}" onclick="SEL['${D.id}']='${t.id}';render()">${t.id===T.id?'☑':'☐'} ${pk(t.price)}</button>`).join('')}</div><button class="pri" style="margin:0;padding:11px" onclick="sell('${D.id}','${T.id}')">＋ Thêm 1 · ${money(GIFT?0:ALT!=null?ALT:T.price)}</button><div class="g2" style="margin:8px 0 0">${kd(D)==='main'?'':`<button onclick="sell('${D.id}','${T.id}',1)">🎁 Tặng 1 tí (${gl(D,T)})</button>`}<button onclick="undoT('${T.id}')" ${kd(D)==='main'?'style="grid-column:1/-1"':''}>− Bớt 1</button></div></div>`};
   const mini=D=>{const T=selT(D),ids=D.tiers.map(t=>t.id),z=ts.filter(s=>ids.includes(s.tid)),c=canT(T,dn),k=c.lim?st(c.lim):0,w=k===2?'low':k===1?'warn':'mut';
     return `<div class="sq sq3"><b style="font-size:12px;line-height:1.15">${esc(D.n)}</b><div style="display:flex;align-items:baseline;justify-content:space-between"><span class="${w==='mut'?'':w}" style="font-size:22px;font-weight:700;line-height:1">${z.length}</span><span class="${w}" style="font-size:11px" ${D.tiers.length>1?`onclick="cyc('${D.id}')"`:''}>${pk(T.price)}${D.tiers.length>1?' ↻':''}</span></div><div style="display:flex;gap:4px"><button class="mb" onclick="undoT('${T.id}')">−</button><button class="mb" style="flex:1.8" onclick="sell('${D.id}','${T.id}',1)">🎁${gl(D,T)}</button><button class="mb pri" style="flex:1.2" onclick="sell('${D.id}','${T.id}')">＋</button></div></div>`};
   const grp=(k,t)=>{const L=S.menu.filter(D=>kd(D)===k);return L.length?`<h3 style="color:var(--mut)">${t}</h3><div class="grid3">${L.map(mini).join('')}</div>`:''};
