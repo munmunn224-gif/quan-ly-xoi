@@ -74,7 +74,6 @@ function mseed(){
 
 /* --- KẾT NỐI API GOOGLE SHEETS VÀ FETCH API --- */
 const API_URL = '[https://script.google.com/macros/s/AKfycbyV0ts9bTPoCJnzcYh5UM2XukZ49nF4CwDAa9Y_UwHSR1rjo7mtYwYbGd_DgQ-HawX3/exec](https://script.google.com/macros/s/AKfycbyV0ts9bTPoCJnzcYh5UM2XukZ49nF4CwDAa9Y_UwHSR1rjo7mtYwYbGd_DgQ-HawX3/exec)';
-
 let GST='',gT=null,gBusy=false,gDirty=false;
 const gtxt=()=>'☁ '+(GST||'sẵn sàng');
 function gst(t){GST=t;['#gs','#gs2'].forEach(q=>{const e=$(q);if(e)e.textContent=gtxt()})}
